@@ -49,4 +49,71 @@ type RawToken struct {
 	end int
 }
 
+type ScannerState struct {
+	index int 
+	lineNumber int 
+	lineStart int
+}
+
+type Scanner struct {
+	source string 
+	errorHandler ErrorHandler
+	trackComment bool
+	isModule bool
+	index int 
+	lineNumber int 
+	lineStart int 
+	curlyStack []string 
+	length int 
+}
+
+func NewScanner(code string, handler ErrorHandler) *Scanner{
+	var lineNumber int 
+	if lineNumber = 0; len(code) > 0 {
+		lineNumber = 1
+	}
+	return &Scanner{
+		source: code, 
+		errorHandler: handler, 
+		trackComment: false, 
+		isModule: false, 
+		length: len(code), 
+		index: 0, 
+		lineNumber: lineNumber, 
+		lineStart : 0,
+		curlyStack: []string{},
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
