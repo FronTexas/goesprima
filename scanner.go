@@ -19,8 +19,8 @@ type Position struct {
 }
 
 type SourceLocation struct {
-	start Position
-	end Position
+	start *Position
+	end *Position
 	source string
 }
 
@@ -29,7 +29,7 @@ type Comment_scanner struct {
 	multiline bool
 	slice []int
 	_range []int
-	loc SourceLocation
+	loc *SourceLocation
 }
 
 type RawToken struct {
@@ -98,6 +98,83 @@ func (self *Scanner) restoreState(state *ScannerState) {
 	self.lineNumber = state.lineNumber
 	self.lineStart = state.lineStart
 }
+
+func (self *Scanner) eof() bool {
+	return self.index >= self.length
+}
+
+// TODO: Uncomment these two functions after Error implementation is finished
+
+// func (self *Scanner) throwUnexpectedToken(message string) *Error{
+// 	return self.errorHandler.throwError(self.index, self.lineNumber,
+// 		self.index - self.lineStart + 1, message)
+// }
+
+// func (self *Scanner) tolerateUnexpectedToken(message){
+// 	self.errorHandler.tolerateError(self.index, self.lineNumber,
+// 		self.index - self.lineStart +1, message)
+// }
+
+func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
+	comments := []*Comment_scanner{}
+	var start int 
+	var loc *SourceLocation
+	if self.trackComment {
+		start = self.index - offset
+		loc = &SourceLocation{
+			start: &Position{
+				line: self.lineNumber, 
+				column: self.index - self.lineStart - offset,
+			},
+		}
+	}
+
+	for !self.eof() {
+		ch := []rune(self.source)[self.index]
+		self.index++
+		// TODO implement IsLineTerminator in character.go
+		if IsLineTerminator(ch) {
+			if self.trackComment {
+				loc.end = &Position{
+					line: self.lineNumber, 
+					column: self.index - self.lineStart - 1,
+				}
+				entry := &Comment_scanner{
+					multiline: false, 
+					slice: []int{start + offset, self.index - 1},
+					_range: []int{start, self.index - 1},
+					loc: loc,
+				}
+				comments = append(comments, entry)
+			}
+
+			if ch == 13 && []rune(self.source)[self.index] == 10 {
+				self.index++
+			}
+		}
+		self.lineNumber++
+		self.lineStart = self.index
+		return comments
+	}
+
+	if self.trackComment {
+		loc.end = &Position{
+			line: self.lineNumber, 
+			column: self.index - self.lineStart,
+		}
+
+		entry := &Comment_scanner{
+			multiline: false, 
+			slice: []int{start + offset, self.index},
+			_range: []int{start, self.index},
+			loc: loc,
+		}
+		comments = append(comments, entry)
+	}
+	return comments
+}
+
+
 
 
 
