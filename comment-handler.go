@@ -217,6 +217,15 @@ func (self CommentHandler) visitComment(node Node, metadata Metadata){
 	}
 }
 
+func (self CommentHandler) visit(node Node, metadata Metadata){
+	if node._type == "LineComment" {
+		self.visitComment(node, metadata)
+	}else if node._type == "BlockComment" {
+		self.visitComment(node, metadata)
+	}else if self.attach {
+		self.visitNode(node, metadata)
+	}
+}
 
 
 
