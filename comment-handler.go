@@ -1,15 +1,16 @@
 package main 
 
 type (
-	Comment interface {
-		_type() string 
-		value() string
-		_range() [2]int
+	Comment struct {
+		_type string 
+		value string
+		_range []int
+		loc *SourceLocation
 	}
 
-	Entry interface {
-		comment() Comment 
-		start() int
+	Entry struct {
+		comment *Comment 
+		start int
 	}
 
 	NodeInfo struct { 
@@ -30,9 +31,12 @@ type Node struct {
 	_type string
 	// I am not sure if body can be an array of Node pointers
 	body []*Node 
-	innerComments []Comment
-	trailingComments []Comment
-	leadingComments []Comment
+	innerComments []*Comment
+	trailingComments []*Comment
+	leadingComments []*Comment
+	value interface{}
+	_range []int
+	loc *SourceLocation
 }
 
 type (
@@ -63,11 +67,11 @@ func NewCommentHandler() CommentHandler {
 
 func (self CommentHandler) insertInnerComments(node Node, metadata Metadata){
 	if node._type == Syntax["BlockStatement"] && len(node.body) == 0 {
-		innerComments := []Comment{}
+		innerComments := []*Comment{}
 		for i:= len(self.leading) - 1; i >= 0; i-- {
 			entry := self.leading[i]
-			if metadata.end.offset >= entry.start() { 
-				innerComments = append([]Comment{entry.comment()}, innerComments...)
+			if metadata.end.offset >= entry.start { 
+				innerComments = append([]*Comment{entry.comment}, innerComments...)
 				self.leading = append(self.leading[:i], self.leading[i+1:]...)
 				// splicing
 				self.trailing = append(self.trailing[:i], self.trailing[i+1:]...)
@@ -80,15 +84,15 @@ func (self CommentHandler) insertInnerComments(node Node, metadata Metadata){
 	}
 }
 
-func (self CommentHandler) findTrailingComments(metadata Metadata) []Comment{
-	trailingComments := []Comment{}
+func (self CommentHandler) findTrailingComments(metadata Metadata) []*Comment{
+	trailingComments := []*Comment{}
 
 	if len(self.trailing) > 0 { 
 		for i:= len(self.trailing) - 1; i >= 0; i-- {
 			entry := self.trailing[i]
-			if entry.start() >= metadata.end.offset {
+			if entry.start >= metadata.end.offset {
 				// unshifting
-				trailingComments = append([]Comment{entry.comment()}, trailingComments...)
+				trailingComments = append([]*Comment{entry.comment}, trailingComments...)
 			}
 		}
 		self.trailing = []Entry{}
@@ -98,7 +102,7 @@ func (self CommentHandler) findTrailingComments(metadata Metadata) []Comment{
 	last := self.stack[len(self.stack) - 1]
 	if last != nil && last.node.trailingComments != nil { 
 		firstComment := last.node.trailingComments[0]
-		if firstComment != nil && firstComment._range()[0] >= metadata.end.offset { 
+		if firstComment != nil && firstComment._range[0] >= metadata.end.offset { 
 			trailingComments = last.node.trailingComments
 			// TODO delete last.node.trailingComments
 		}
@@ -106,8 +110,8 @@ func (self CommentHandler) findTrailingComments(metadata Metadata) []Comment{
 	return trailingComments	
 }
 
-func (self CommentHandler) findLeadingComments(metadata Metadata) []Comment{
-	leadingComments := []Comment{}
+func (self CommentHandler) findLeadingComments(metadata Metadata) []*Comment{
+	leadingComments := []*Comment{}
 	var target *Node
 	for len(self.stack) > 0 { 
 		entry := self.stack[len(self.stack) - 1]
@@ -127,8 +131,8 @@ func (self CommentHandler) findLeadingComments(metadata Metadata) []Comment{
 
 		for i := count - 1; i >= 0; i-- {
 			comment := target.leadingComments[i]
-			if comment._range()[1] <= metadata.start.offset { 
-				leadingComments = append([]Comment{comment}, leadingComments...)
+			if comment._range[1] <= metadata.start.offset { 
+				leadingComments = append([]*Comment{comment}, leadingComments...)
 				target.leadingComments = append(target.leadingComments[:i], target.leadingComments[i+1:]...)
 			}
 		}
@@ -141,8 +145,8 @@ func (self CommentHandler) findLeadingComments(metadata Metadata) []Comment{
 
 	for i := len(self.leading) - 1; i >= 0; i-- {
 		entry := self.leading[i]
-		if entry.start() <= metadata.start.offset {
-			leadingComments = append([]Comment{entry.comment()}, leadingComments...)
+		if entry.start <= metadata.start.offset {
+			leadingComments = append([]*Comment{entry.comment}, leadingComments...)
 			self.leading = append(self.leading[:i], self.leading[i+1:]...)
 		}
 	}
@@ -171,6 +175,46 @@ func (self CommentHandler) visitNode (node Node, metadata Metadata){
 		&node, 
 		metadata.start.offset,
 	})
+}
+
+func (self CommentHandler) visitComment(node Node, metadata Metadata){
+	var _type string 
+	if _type = "Block"; string(node._type[0]) == "L" {
+		_type = "Line"
+	}
+
+	comment := Comment{
+		_type: _type, 
+		value: (node.value).(string),
+	}
+
+	if node._range != nil {
+		comment._range = node._range
+	}
+
+	if node.loc != nil {
+		comment.loc = node.loc
+	}
+
+	self.comments = append(self.comments, comment)
+
+	if self.attach {
+		entry := Entry {
+			comment: &Comment{
+				_type: _type, 
+				value: node.value.(string), 
+				_range: []int{metadata.start.offset, metadata.end.offset},
+			},
+		}
+
+		if node.loc != nil {
+			entry.comment.loc = node.loc
+		}
+
+		node._type = _type 
+		self.leading = append(self.leading, entry)
+		self.trailing = append(self.trailing, entry)
+	}
 }
 
 
