@@ -174,6 +174,75 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 	return comments
 }
 
+func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
+	comments := []*Comment_scanner{}
+	var start int 
+	var loc *SourceLocation
+
+	if self.trackComment {
+		start = self.index - 2
+		loc = &SourceLocation{
+			start: &Position{
+				line: self.lineNumber, 
+				column: self.index - self.lineStart - 2,
+			},
+		}
+	}
+
+	for !self.eof() {
+		ch := []rune(self.source)[self.index]
+		self.index++
+		// TODO implement IsLineTerminator in character.go
+		if IsLineTerminator(ch) {
+			if ch == 0x0D && []rune(self.source)[self.index + 1] == 0x0A{
+				self.index++
+			}
+			self.lineNumber++
+			self.index++
+			self.lineStart = self.index
+		}else if ch == 0x2A{
+			if []rune(self.source)[self.index + 1] == 0x2F {
+				self.index += 2 
+				if self.trackComment {
+					loc.end = &Position{
+						line: self.lineNumber, 
+						column: self.index - self.lineStart,
+					}
+					entry := &Comment_scanner{
+						multiline: true, 
+						slice: []int{start + 2, self.index - 2},
+						_range: []int{start, self.index},
+						loc: loc,
+					}
+					comments = append(comments, entry)
+				}
+				return comments
+			}
+			self.index++
+		}else{
+			self.index++
+		}
+	}
+    // Ran off the end of the file - the whole thing is a comment
+	if self.trackComment {
+		loc.end = &Position{
+			line: self.lineNumber, 
+			column: self.index - self.lineStart,
+		}
+
+		entry := &Comment_scanner{
+			multiline: true, 
+			slice: []int{start + 2, self.index},
+			_range: []int{start, self.index},
+			loc: loc,
+		}
+		comments = append(comments, entry)
+	}
+	// TODO uncomment this once the method is implemented
+	// self.tolerateUnexpectedToken()
+	return comments
+}
+
 
 
 
