@@ -85,6 +85,20 @@ func NewScanner(code string, handler ErrorHandler) *Scanner{
 	}
 }
 
+func (self *Scanner) saveState() *ScannerState{
+	return &ScannerState{
+		index: self.index, 
+		lineNumber: self.lineNumber, 
+		lineStart: self.lineStart,
+	}
+}
+
+func (self *Scanner) restoreState(state *ScannerState) {
+	self.index = state.index 
+	self.lineNumber = state.lineNumber
+	self.lineStart = state.lineStart
+}
+
 
 
 
