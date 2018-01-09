@@ -3,6 +3,8 @@ package main
 import(
 	"strings"
 	"regexp"
+	"goesprima/messages"
+	"goesprima/character"
 )
 
 func getCharCodeAt(s string, i int) rune{
@@ -109,15 +111,22 @@ func (self *Scanner) eof() bool {
 
 // TODO: Uncomment these two functions after Error implementation is finished
 
-// func (self *Scanner) throwUnexpectedToken(message string) *Error{
-// 	return self.errorHandler.throwError(self.index, self.lineNumber,
-// 		self.index - self.lineStart + 1, message)
-// }
+ func (self *Scanner) throwUnexpectedToken(message string) *Error{
+ 	if message == "" {
+ 		message = messages.GetInstance().UnexpectedTokenIllegal
+	}
 
-// func (self *Scanner) tolerateUnexpectedToken(message){
-// 	self.errorHandler.tolerateError(self.index, self.lineNumber,
-// 		self.index - self.lineStart +1, message)
-// }
+ 	return self.errorHandler.throwError(self.index, self.lineNumber,
+ 		self.index - self.lineStart + 1, message)
+ }
+
+ func (self *Scanner) tolerateUnexpectedToken(message string){
+ 	if message == ""{
+ 		message = messages.GetInstance().UnexpectedTokenIllegal
+	}
+ 	self.errorHandler.tolerateError(self.index, self.lineNumber,
+ 		self.index - self.lineStart +1, message)
+ }
 
 func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 	comments := []*Comment_scanner{}
@@ -137,7 +146,7 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 		ch := []rune(self.source)[self.index]
 		self.index++
 		// TODO implement IsLineTerminator in character.go
-		if IsLineTerminator(ch) {
+		if character.IsLineTerminator(ch) {
 			if self.trackComment {
 				loc.end = &Position{
 					line: self.lineNumber,
@@ -197,7 +206,7 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 		ch := []rune(self.source)[self.index]
 		self.index++
 		// TODO implement IsLineTerminator in character.go
-		if IsLineTerminator(ch) {
+		if character.IsLineTerminator(ch) {
 			if ch == 0x0D && []rune(self.source)[self.index + 1] == 0x0A{
 				self.index++
 			}
@@ -242,7 +251,7 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 		}
 		comments = append(comments, entry)
 	}
-	// TODO uncomment this once the method is implemented
+	// TODO uncomment self once the method is implemented
 	// self.tolerateUnexpectedToken()
 	return comments
 }
@@ -258,14 +267,13 @@ func (self *Scanner) scanComments() []*Comment_scanner{
 	for !self.eof() {
 		ch := getCharCodeAt(self.source, self.index)
 
-		if IsWhiteSpace(ch) {
+		if character.IsWhiteSpace(ch) {
 			self.index++
-		}else if IsLineTerminator(ch){
+		}else if character.IsLineTerminator(ch){
 			self.index++
 			if ch == 0x0D && getCharCodeAt(self.source, self.index) == 0X0A {
 				self.index++
 			}
-
 			self.lineNumber++
 			self.lineStart = self.index
 			start = true
@@ -325,7 +333,123 @@ func (self *Scanner) isFutureReservedWord(id string) bool {
 	return false
 }
 
+func (self *Scanner) isRestrictedWord(id string) bool {
+	return id == "eval" || id == "arguments"
+}
 
+func (self *Scanner) isKeyword(id string) bool {
+	switch len(id){
+	case 2:
+		return id == "if" || id == "in" || id == "do"
+	case 3:
+		return (id == "var") || (id == "for") || (id == "new") ||
+		(id == "try") || (id == "let")
+	case 4:
+		return (id == "self") || (id == "else") || (id == "case") ||
+		(id == "void") || (id == "with") || (id == "enum")
+	case 5:
+		return (id == "while") || (id == "break") || (id == "catch") ||
+		(id == "throw") || (id == "const") || (id == "yield") ||
+		(id == "class") || (id == "super")
+	case 6:
+		return (id == "return") || (id == "typeof") || (id == "delete") ||
+		(id == "switch") || (id == "export") || (id == "import")
+	case 7:
+		return (id == "default") || (id == "finally") || (id == "extends")
+	case 8:
+		return (id == "function") || (id == "continue") || (id == "debugger")
+	case 10:
+		return (id == "instanceof")
+	}
+	return false
+}
+
+func (self *Scanner) codePointAt(i int) rune {
+	cp := getCharCodeAt(self.source, i)
+
+	if (cp >= 0xD800 && cp <= 0xDBFF) {
+		second  := getCharCodeAt(self.source, i + 1)
+		if (second >= 0xDC00 && second <= 0xDFFF) {
+			first := cp
+			cp = (first-0xD800)*0x400 + second - 0xDC00 + 0x10000
+		}
+	}
+	return cp
+}
+
+func (self *Scanner) scanHexEscape(prefix string) *string {
+	var len int
+	if len = 4; prefix == "u"{
+		len = 2
+	}
+	code := 0
+
+	for i := 0; i < len; i++ {
+		if !self.eof() && character.IsHexDigit(getCharCodeAt(self.source, self.index)) {
+			code = code * 16 + hexValue(string(self.source[self.index + 1]))
+			self.index += 1
+		} else {
+			return nil
+		}
+	}
+	//return String.fromCharCode(code)
+	toReturn := string(code)
+	return &toReturn
+}
+
+func (self *Scanner) scanUnicodeCodePointEscape() string {
+	ch := self.source[self.index]
+	code := 0
+
+	// At least, one hex digit is required.
+	if (ch == '}') {
+		self.throwUnexpectedToken("")
+	}
+
+	for !self.eof() {
+		ch = self.source[self.index]
+		self.index += 1
+		if (!character.IsHexDigit(getCharCodeAt(string(ch), 0))) {
+			break
+		}
+		code = code * 16 + hexValue(string(ch))
+	}
+
+	if (code > 0x10FFFF || ch != '}') {
+		self.throwUnexpectedToken("")
+	}
+
+	return character.FromCodePoint(rune(code))
+}
+
+func (self *Scanner) getIdentifier() string {
+    start := self.index
+    self.index += 1
+	for !self.eof() {
+		ch := getCharCodeAt(self.source, self.index)
+		if (ch == 0x5C) {
+			// Blackslash (U+005C) marks Unicode escape sequence.
+			self.index = start
+			return self.getComplexIdentifier()
+		} else if (ch >= 0xD800 && ch < 0xDFFF) {
+			// Need to handle surrogate pairs.
+			self.index = start
+			return self.getComplexIdentifier()
+		}
+		if (character.IsIdentifierPart(ch)) {
+			self.index++
+		} else {
+			break
+		}
+	}
+
+	return self.source[start : self.index]
+}
+
+func (self *Scanner) getComplexIdentifier() string {
+	/*TODO implement this*/
+	return ""
+}
 
 
 
