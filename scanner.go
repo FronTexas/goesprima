@@ -1,9 +1,13 @@
-package main 
+package main
 
 import(
 	"strings"
 	"regexp"
 )
+
+func getCharCodeAt(s string, i int) rune{
+	return []rune(s)[i]
+}
 
 func hexValue(ch string) int {
 	return strings.Index("0123456789abcdef", strings.ToLower(ch))
@@ -14,8 +18,8 @@ func octalValue (ch string) int {
 }
 
 type Position struct {
-	line int 
-	column int 
+	line int
+	column int
 }
 
 type SourceLocation struct {
@@ -35,51 +39,51 @@ type Comment_scanner struct {
 type RawToken struct {
 	_type Token
 	value_string string
-	value_number int 
-	pattern string 
+	value_number int
+	pattern string
 	flags string
 	regex regexp.Regexp
 	octal bool
 	cooked string
 	head bool
 	tail bool
-	lineNumber int 
-	lineStart int 
-	start int 
+	lineNumber int
+	lineStart int
+	start int
 	end int
 }
 
 type ScannerState struct {
-	index int 
-	lineNumber int 
+	index int
+	lineNumber int
 	lineStart int
 }
 
 type Scanner struct {
-	source string 
+	source string
 	errorHandler ErrorHandler
 	trackComment bool
 	isModule bool
-	index int 
-	lineNumber int 
-	lineStart int 
-	curlyStack []string 
-	length int 
+	index int
+	lineNumber int
+	lineStart int
+	curlyStack []string
+	length int
 }
 
 func NewScanner(code string, handler ErrorHandler) *Scanner{
-	var lineNumber int 
+	var lineNumber int
 	if lineNumber = 0; len(code) > 0 {
 		lineNumber = 1
 	}
 	return &Scanner{
-		source: code, 
-		errorHandler: handler, 
-		trackComment: false, 
-		isModule: false, 
-		length: len(code), 
-		index: 0, 
-		lineNumber: lineNumber, 
+		source: code,
+		errorHandler: handler,
+		trackComment: false,
+		isModule: false,
+		length: len(code),
+		index: 0,
+		lineNumber: lineNumber,
 		lineStart : 0,
 		curlyStack: []string{},
 	}
@@ -87,14 +91,14 @@ func NewScanner(code string, handler ErrorHandler) *Scanner{
 
 func (self *Scanner) saveState() *ScannerState{
 	return &ScannerState{
-		index: self.index, 
-		lineNumber: self.lineNumber, 
+		index: self.index,
+		lineNumber: self.lineNumber,
 		lineStart: self.lineStart,
 	}
 }
 
 func (self *Scanner) restoreState(state *ScannerState) {
-	self.index = state.index 
+	self.index = state.index
 	self.lineNumber = state.lineNumber
 	self.lineStart = state.lineStart
 }
@@ -117,13 +121,13 @@ func (self *Scanner) eof() bool {
 
 func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 	comments := []*Comment_scanner{}
-	var start int 
+	var start int
 	var loc *SourceLocation
 	if self.trackComment {
 		start = self.index - offset
 		loc = &SourceLocation{
 			start: &Position{
-				line: self.lineNumber, 
+				line: self.lineNumber,
 				column: self.index - self.lineStart - offset,
 			},
 		}
@@ -136,11 +140,11 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 		if IsLineTerminator(ch) {
 			if self.trackComment {
 				loc.end = &Position{
-					line: self.lineNumber, 
+					line: self.lineNumber,
 					column: self.index - self.lineStart - 1,
 				}
 				entry := &Comment_scanner{
-					multiline: false, 
+					multiline: false,
 					slice: []int{start + offset, self.index - 1},
 					_range: []int{start, self.index - 1},
 					loc: loc,
@@ -159,12 +163,12 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 
 	if self.trackComment {
 		loc.end = &Position{
-			line: self.lineNumber, 
+			line: self.lineNumber,
 			column: self.index - self.lineStart,
 		}
 
 		entry := &Comment_scanner{
-			multiline: false, 
+			multiline: false,
 			slice: []int{start + offset, self.index},
 			_range: []int{start, self.index},
 			loc: loc,
@@ -176,14 +180,14 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 
 func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 	comments := []*Comment_scanner{}
-	var start int 
+	var start int
 	var loc *SourceLocation
 
 	if self.trackComment {
 		start = self.index - 2
 		loc = &SourceLocation{
 			start: &Position{
-				line: self.lineNumber, 
+				line: self.lineNumber,
 				column: self.index - self.lineStart - 2,
 			},
 		}
@@ -202,14 +206,14 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 			self.lineStart = self.index
 		}else if ch == 0x2A{
 			if []rune(self.source)[self.index + 1] == 0x2F {
-				self.index += 2 
+				self.index += 2
 				if self.trackComment {
 					loc.end = &Position{
-						line: self.lineNumber, 
+						line: self.lineNumber,
 						column: self.index - self.lineStart,
 					}
 					entry := &Comment_scanner{
-						multiline: true, 
+						multiline: true,
 						slice: []int{start + 2, self.index - 2},
 						_range: []int{start, self.index},
 						loc: loc,
@@ -226,12 +230,12 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
     // Ran off the end of the file - the whole thing is a comment
 	if self.trackComment {
 		loc.end = &Position{
-			line: self.lineNumber, 
+			line: self.lineNumber,
 			column: self.index - self.lineStart,
 		}
 
 		entry := &Comment_scanner{
-			multiline: true, 
+			multiline: true,
 			slice: []int{start + 2, self.index},
 			_range: []int{start, self.index},
 			loc: loc,
@@ -243,8 +247,72 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 	return comments
 }
 
+func (self *Scanner) scanComments() []*Comment_scanner{
+	var comments []*Comment_scanner
+	if self.trackComment{
+		comments = []*Comment_scanner{}
+	}
 
+	start := self.index == 0
 
+	for !self.eof() {
+		ch := getCharCodeAt(self.source, self.index)
+
+		if IsWhiteSpace(ch) {
+			self.index++
+		}else if IsLineTerminator(ch){
+			self.index++
+			if ch == 0x0D && getCharCodeAt(self.source, self.index) == 0X0A {
+				self.index++
+			}
+
+			self.lineNumber++
+			self.lineStart = self.index
+			start = true
+		}else if ch == 0x2F {
+			ch = getCharCodeAt(self.source, self.index + 1)
+			if ch == 0x2F {
+				self.index += 2
+				comment := self.skipSingleLineComment(2)
+				if self.trackComment{
+					comments = append(comments, comment...)
+				}
+				start = true
+			}else if ch == 0x2A {
+				self.index += 2
+				comment := self.skipSingleLineComment(3)
+				if self.trackComment {
+					comments = append(comments, comment...)
+				}
+			}else {
+				break
+			}
+		}else if start && ch == 0x2D {
+			if getCharCodeAt(self.source, self.index + 1) == 0x2D && getCharCodeAt(self.source, self.index + 2) == 0x3E {
+				self.index += 3
+				comment := self.skipSingleLineComment(3)
+				if self.trackComment {
+					comments = append(comments, comment...)
+				}
+			}else{
+				break
+			}
+		}else if (ch == 0x3C && !self.isModule){
+			if string([]rune(self.source)[self.index + 1 : self.index + 4]) == "!--"{
+				self.index += 4
+				comment := self.skipSingleLineComment(4)
+				if self.trackComment {
+					comments = append(comments, comment...)
+				}
+			}else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	return comments
+}
 
 
 
