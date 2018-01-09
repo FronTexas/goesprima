@@ -314,6 +314,16 @@ func (self *Scanner) scanComments() []*Comment_scanner{
 	return comments
 }
 
+func (self *Scanner) isFutureReservedWord(id string) bool {
+	switch id {
+	case "enum":
+	case "export":
+	case "import":
+	case "super":
+		return true
+	}
+	return false
+}
 
 
 
