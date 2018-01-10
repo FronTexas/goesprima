@@ -46,3 +46,7 @@ func IsIdentifierStart(cp rune) bool {
 		(cp == 0x5C) ||                      // \ (backslash)
 		((cp >= 0x80) && r.MatchString(FromCodePoint(cp)))
 }
+
+func IsOctalDigit(cp rune) bool {
+	return (cp >= 0x30 && cp <= 0x37);      // 0..7
+}

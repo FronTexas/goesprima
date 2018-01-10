@@ -5,6 +5,7 @@ import(
 	"regexp"
 	"goesprima/messages"
 	"goesprima/character"
+	"goesprima/token"
 )
 
 func getCharCodeAt(s string, i int) rune{
@@ -500,6 +501,160 @@ func (self *Scanner) getComplexIdentifier() string {
 		}
 	}
 	return id
+}
+
+type codeOctalStruct struct {
+	code int
+	octal bool
+}
+
+func (self *Scanner) octalToDecimal(ch string) codeOctalStruct {
+	// \0 is not octal escape sequence
+	octal := (ch != "0");
+	code := octalValue(ch);
+
+	if !self.eof() && character.IsOctalDigit(getCharCodeAt(self.source, self.index)) {
+		octal = true;
+		code = code * 8 + octalValue(string(self.source[self.index+1]))
+		self.index++
+
+		// 3 digits are only allowed when string starts
+		// with 0, 1, 2, 3
+		if strings.Index("0123", string(ch)) >= 0 && !self.eof() && character.IsOctalDigit(getCharCodeAt(self.source, self.index)) {
+			code = code * 8 + octalValue(string(self.source[self.index + 1]));
+			self.index++
+		}
+	}
+
+	return codeOctalStruct{
+		code,
+		octal,
+	};
+}
+
+// https://tc39.github.io/ecma262/#sec-names-and-keywords
+
+func (self *Scanner) scanIdentifier() *RawToken {
+	var _type token.Token
+	start := self.index;
+
+	// Backslash (U+005C) starts an escaped character.
+	var id string
+	if id = self.getIdentifier(); getCharCodeAt(self.source, start) == 0x5C{
+	   id = self.getIdentifier()
+	}
+
+	// There is no keyword or literal with only one character.
+	// Thus, it must be an identifier.
+	if (len(id) == 1) {
+		_type = token.Identifier;
+	} else if (self.isKeyword(id)) {
+		_type = token.Keyword;
+	} else if (id == "null") {
+		_type = token.NullLiteral;
+	} else if (id == "true" || id == "false") {
+		_type = token.BooleanLiteral;
+	} else {
+		_type = token.Identifier;
+	}
+
+	if (_type != token.Identifier && (start + len(id) != self.index)) {
+		restore := self.index;
+		self.index = start;
+		self.tolerateUnexpectedToken(messages.GetInstance().InvalidEscapedReservedWord);
+		self.index = restore;
+	}
+
+	return &RawToken{
+		_type: _type,
+		value_string: id,
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
+
+// https://tc39.github.io/ecma262/#sec-punctuators
+func(self *Scanner) scanPunctuator() *RawToken {
+	start := self.index;
+
+	// Check for most common single-character punctuators.
+	str := string(self.source[self.index]);
+	switch (str) {
+
+		case "(":
+		case "{":
+			if (str == "{") {
+				self.curlyStack = append(self.curlyStack, "{")
+			}
+			self.index++;
+			break;
+		case ".":
+			self.index++;
+			if (self.source[self.index] == '.' && self.source[self.index + 1] == '.') {
+				// Spread operator: ...
+				self.index += 2;
+				str = "...";
+			}
+			break;
+		case "}":
+			self.index++;
+			self.curlyStack = self.curlyStack[:len(self.curlyStack) - 1]
+			break;
+		case ")":
+		case ";":
+		case ",":
+		case "[":
+		case "]":
+		case ":":
+		case "?":
+		case "~":
+			self.index++;
+			break;
+		default:
+			// 4-character punctuator.
+			str = self.source[self.index : 4]
+			if (str == ">>>=") {
+				self.index += 4
+			} else {
+				// 3-character punctuators.
+				str = str[0:3]
+				if str == "===" || str == "!==" || str == ">>>" ||
+					str == "<<=" || str == ">>=" || str == "**=" {
+					self.index += 3
+				} else {
+					// 2-character punctuators.
+					str = str[0:2]
+					if str == "&&" || str == "||" || str == "==" || str == "!=" ||
+						str == "+=" || str == "-=" || str == "*=" || str == "/=" ||
+						str == "++" || str == "--" || str == "<<"|| str == ">>" ||
+						str == "&="|| str == "|="|| str == "^=" || str == "%=" ||
+						str == "<=" || str == ">="|| str == "=>" || str == "**" {
+						self.index += 2
+					} else {
+						// 1-character punctuators.
+						str = string(self.source[self.index])
+						if strings.Index("<>=!+-*%&|^/", str) >= 0 {
+							self.index++
+						}
+					}
+				}
+			}
+	}
+
+	if (self.index == start) {
+		self.throwUnexpectedToken("");
+	}
+
+	return &RawToken{
+		_type: token.Punctuator,
+		value_string: str,
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
 }
 
 

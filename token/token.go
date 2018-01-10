@@ -1,9 +1,9 @@
-package main 
+package token
 
 type Token int
 
 const (
-	_ Token = iota 
+	_ Token = iota
 	BooleanLiteral
 	EOF
 	Identifier
@@ -15,3 +15,4 @@ const (
 	RegularExpression
 	Template
 )
+
