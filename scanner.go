@@ -377,7 +377,7 @@ func (self *Scanner) codePointAt(i int) rune {
 	return cp
 }
 
-func (self *Scanner) scanHexEscape(prefix string) *string {
+func (self *Scanner) scanHexEscape(prefix string) string {
 	var len int
 	if len = 4; prefix == "u"{
 		len = 2
@@ -389,12 +389,12 @@ func (self *Scanner) scanHexEscape(prefix string) *string {
 			code = code * 16 + hexValue(string(self.source[self.index + 1]))
 			self.index += 1
 		} else {
-			return nil
+			return ""
 		}
 	}
 	//return String.fromCharCode(code)
 	toReturn := string(code)
-	return &toReturn
+	return toReturn
 }
 
 func (self *Scanner) scanUnicodeCodePointEscape() string {
@@ -447,9 +447,62 @@ func (self *Scanner) getIdentifier() string {
 }
 
 func (self *Scanner) getComplexIdentifier() string {
-	/*TODO implement this*/
-	return ""
+	cp := self.codePointAt(self.index)
+	id := character.FromCodePoint(cp)
+	self.index += len(id)
+
+	// '\u' (U+005C, U+0075) denotes an escaped character.
+	var ch string
+	if (cp == 0x5C) {
+		if (getCharCodeAt(self.source, self.index) != 0x75) {
+			self.throwUnexpectedToken("")
+		}
+		self.index++
+		if (self.source[self.index] == '{') {
+			self.index++
+			ch = self.scanUnicodeCodePointEscape()
+		} else {
+			ch = self.scanHexEscape("u")
+			if ch == "" || ch == "\\" || !character.IsIdentifierStart(getCharCodeAt(ch, 0)) {
+				self.throwUnexpectedToken("")
+			}
+		}
+		id = ch
+	}
+
+	for !self.eof() {
+		cp = self.codePointAt(self.index)
+		if (!character.IsIdentifierPart(cp)) {
+			break
+		}
+		ch = character.FromCodePoint(cp)
+		id += ch
+		self.index += len(ch)
+
+		// '\u' (U+005C, U+0075) denotes an escaped character.
+		if (cp == 0x5C) {
+			id = id[0:len(id) - 1]
+
+			if (getCharCodeAt(self.source, self.index) != 0x75) {
+				self.throwUnexpectedToken("")
+			}
+			self.index++
+			if (self.source[self.index] == '{') {
+				self.index++
+				ch = self.scanUnicodeCodePointEscape()
+			} else {
+				ch = self.scanHexEscape("u")
+				if ch == "" || ch == "\\" || !character.IsIdentifierPart(getCharCodeAt(ch, 0)) {
+					self.throwUnexpectedToken("")
+				}
+			}
+			id += ch
+		}
+	}
+	return id
 }
+
+
 
 
 
