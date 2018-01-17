@@ -1206,6 +1206,67 @@ func (self *Scanner) scanRegExpFlags() string {
 	return flags;
 }
 
+func (self *Scanner) scanRegExp()  {
+	// TODO implement self after implementing testRegExp
+}
+
+
+func (self *Scanner) lex() *RawToken {
+	if self.eof() {
+		return &RawToken{
+			_type: token.EOF,
+			value_string: "",
+			lineNumber: self.lineNumber,
+			lineStart: self.lineStart,
+			start: self.index,
+			end: self.index,
+		};
+	}
+
+	cp := getCharCodeAt(self.source, self.index);
+
+	if (character.IsIdentifierStart(cp)) {
+		return self.scanIdentifier();
+	}
+
+	// Very common: ( and ) and ;
+	if (cp == 0x28 || cp == 0x29 || cp == 0x3B) {
+		return self.scanPunctuator();
+	}
+
+	// String literal starts with single quote (U+0027) or double quote (U+0022).
+	if (cp == 0x27 || cp == 0x22) {
+		return self.scanStringLiteral();
+	}
+
+	// Dot (.) U+002E can also start a floating-point number, hence the need
+	// to check the next character.
+	if (cp == 0x2E) {
+		if character.IsDecimalDigit(getCharCodeAt(self.source, self.index + 1)) {
+			return self.scanNumericLiteral();
+		}
+		return self.scanPunctuator();
+	}
+
+	if (character.IsDecimalDigit(cp)) {
+		return self.scanNumericLiteral();
+	}
+
+	// Template literals start with ` (U+0060) for template head
+	// or } (U+007D) for template middle or template tail.
+	if (cp == 0x60 || (cp == 0x7D && self.curlyStack[len(self.curlyStack) - 1] == "${")) {
+		return self.scanTemplate();
+	}
+
+	// Possible identifier start in a surrogate pair.
+	if (cp >= 0xD800 && cp < 0xDFFF) {
+		if (character.IsIdentifierStart(self.codePointAt(self.index))) {
+			return self.scanIdentifier();
+		}
+	}
+
+	return self.scanPunctuator();
+}
 
 
 
