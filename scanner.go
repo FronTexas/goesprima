@@ -3,9 +3,11 @@ package main
 import(
 	"strings"
 	"regexp"
+	"strconv"
 	"goesprima/messages"
 	"goesprima/character"
 	"goesprima/token"
+
 )
 
 func getCharCodeAt(s string, i int) rune{
@@ -40,9 +42,9 @@ type Comment_scanner struct {
 }
 
 type RawToken struct {
-	_type Token
+	_type token.Token
 	value_string string
-	value_number int
+	value_number float32
 	pattern string
 	flags string
 	regex regexp.Regexp
@@ -208,7 +210,7 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 		self.index++
 		// TODO implement IsLineTerminator in character.go
 		if character.IsLineTerminator(ch) {
-			if ch == 0x0D && []rune(self.source)[self.index + 1] == 0x0A{
+			if ch == 0x0D && []rune(self.source)[self.index] == 0x0A{
 				self.index++
 			}
 			self.lineNumber++
@@ -515,13 +517,13 @@ func (self *Scanner) octalToDecimal(ch string) codeOctalStruct {
 
 	if !self.eof() && character.IsOctalDigit(getCharCodeAt(self.source, self.index)) {
 		octal = true;
-		code = code * 8 + octalValue(string(self.source[self.index+1]))
+		code = code * 8 + octalValue(string(self.source[self.index]))
 		self.index++
 
 		// 3 digits are only allowed when string starts
 		// with 0, 1, 2, 3
 		if strings.Index("0123", string(ch)) >= 0 && !self.eof() && character.IsOctalDigit(getCharCodeAt(self.source, self.index)) {
-			code = code * 8 + octalValue(string(self.source[self.index + 1]));
+			code = code * 8 + octalValue(string(self.source[self.index]));
 			self.index++
 		}
 	}
@@ -657,16 +659,511 @@ func(self *Scanner) scanPunctuator() *RawToken {
 	};
 }
 
+// https://tc39.github.io/ecma262/#sec-literals-numeric-literals
+func (self *Scanner) scanHexLiteral(start int) *RawToken {
+	num := "";
+
+	for !self.eof() {
+		if !character.IsHexDigit(getCharCodeAt(self.source, self.index)) {
+			break;
+		}
+		num += string(self.source[self.index])
+		self.index++
+	}
+
+	if len(num) == 0 {
+		self.throwUnexpectedToken("");
+	}
+
+	if (character.IsIdentifierStart(getCharCodeAt(self.source, self.index))) {
+		self.throwUnexpectedToken("");
+	}
+	value_number, _ := strconv.ParseInt("0x" + num, 16, 0)
+	return &RawToken{
+		_type: token.NumericLiteral,
+		value_number: float32(value_number),
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
+
+func (self *Scanner) scanBinaryLiteral(start int) *RawToken {
+	num := "";
+	var ch rune
+
+	for !self.eof() {
+		ch = rune(self.source[self.index]);
+		if ch != '0' && ch != '1' {
+			break;
+		}
+		num += string(self.source[self.index]);
+		self.index++
+	}
+
+	if len(num) == 0 {
+		// only 0b or 0B
+		self.throwUnexpectedToken("");
+	}
+
+	if (!self.eof()) {
+		ch = getCharCodeAt(self.source, self.index);
+		/* istanbul ignore else */
+		if (character.IsIdentifierStart(ch) || character.IsDecimalDigit(ch)) {
+			self.throwUnexpectedToken("");
+		}
+	}
+
+	value_number, _ := strconv.ParseInt(num, 2, 0)
+	return &RawToken{
+		_type: token.NumericLiteral,
+		value_number: float32(value_number),
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
+
+func (self *Scanner) scanOctalLiteral(prefix string, start int) *RawToken {
+	num := "";
+	octal := false;
+
+	if (character.IsOctalDigit(getCharCodeAt(prefix, 0))) {
+		octal = true;
+		num = "0" + string(self.source[self.index]);
+		self.index++
+	} else {
+		self.index++
+	}
+
+	for !self.eof() {
+		if !character.IsOctalDigit(getCharCodeAt(self.source, self.index)) {
+			break;
+		}
+		num += string(self.source[self.index]);
+		self.index++
+	}
+
+	if (!octal && len(num) == 0) {
+		// only 0o or 0O
+		self.throwUnexpectedToken("");
+	}
+
+	if character.IsIdentifierStart(getCharCodeAt(self.source, self.index)) || character.IsDecimalDigit(getCharCodeAt(self.source, self.index)) {
+		self.throwUnexpectedToken("");
+	}
+	value_number, _ := strconv.ParseInt(num, 2, 0)
+	return &RawToken{
+		_type: token.NumericLiteral,
+		value_number: float32(value_number),
+		octal: octal,
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
+
+func (self *Scanner) isImplicitOctalLiteral() bool {
+	// Implicit octal, unless there is a non-octal digit.
+	// (Annex B.1.1 on Numeric Literals)
+	for i := self.index + 1; i < self.length; i++ {
+		ch := self.source[i];
+		if ch == '8' || ch == '9' {
+			return false;
+		}
+		if !character.IsOctalDigit(getCharCodeAt(string(ch), 0)) {
+			return true;
+		}
+	}
+
+	return true;
+}
+
+func (self *Scanner) scanNumericLiteral() *RawToken {
+	start := self.index;
+	ch := self.source[start];
+
+	// TODO figure out how to use assert instead of if statement
+	if !character.IsDecimalDigit(getCharCodeAt(string(ch), 0)) && !(ch == '.'){
+		panic("Numeric literal must start with a decimal digit or a decimal point")
+	}
+
+	var num string;
+	if (ch != '.') {
+		num = string(self.source[self.index]);
+		self.index++
+		ch = self.source[self.index];
+
+		// Hex number starts with '0x'.
+		// Octal number starts with '0'.
+		// Octal number in ES6 starts with '0o'.
+		// Binary number in ES6 starts with '0b'.
+		if num == "0" {
+			if ch == 'x' || ch == 'X' {
+				self.index++;
+				return self.scanHexLiteral(start);
+			}
+			if ch == 'b' || ch == 'B' {
+				self.index++
+				return self.scanBinaryLiteral(start);
+			}
+			if ch == 'o' || ch == 'O' {
+				return self.scanOctalLiteral(string(ch), start);
+			}
+
+			if &ch != nil && character.IsOctalDigit(getCharCodeAt(string(ch), 0)) {
+				if (self.isImplicitOctalLiteral()) {
+					return self.scanOctalLiteral(string(ch), start);
+				}
+			}
+		}
+
+		for (character.IsDecimalDigit(getCharCodeAt(self.source, self.index))) {
+			num += string(self.source[self.index])
+			self.index++
+		}
+		ch = self.source[self.index];
+	}
+
+	if (ch == '.') {
+		num += string(self.source[self.index]);
+		self.index++
+		for character.IsDecimalDigit(getCharCodeAt(self.source, self.index)) {
+			num += string(self.source[self.index]);
+			self.index++
+		}
+		ch = self.source[self.index];
+	}
+
+	if ch == 'e' || ch == 'E' {
+		num += string(self.source[self.index]);
+		self.index++
+
+		ch = self.source[self.index];
+		if (ch == '+' || ch == '-') {
+			num += string(self.source[self.index])
+			self.index++
+		}
+		if (character.IsDecimalDigit(getCharCodeAt(self.source, self.index))) {
+			for (character.IsDecimalDigit(getCharCodeAt(self.source, self.index))) {
+				num += string(self.source[self.index]);
+				self.index++
+			}
+		} else {
+			self.throwUnexpectedToken("");
+		}
+	}
+
+	if (character.IsIdentifierStart(getCharCodeAt(self.source, self.index))) {
+		self.throwUnexpectedToken("");
+	}
+	value_number, _ := strconv.ParseFloat(num,32)
+	return &RawToken{
+		_type: token.NumericLiteral,
+		value_number: float32(value_number),
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
+
+// https://tc39.github.io/ecma262/#sec-literals-string-literals
+func (self *Scanner) scanStringLiteral() *RawToken {
+	start := self.index;
+	quote := self.source[start];
+	if !(quote == '\'') && !(quote == '"') {
+		panic("String literal must starts with a quote")
+	}
+
+	self.index++;
+	octal := false;
+	var str string
+
+	for !self.eof() {
+		ch := self.source[self.index]
+		self.index++
+
+		if ch == quote {
+			// TODO quote supposed to be empty, not a space
+			quote = ' ';
+			break;
+		} else if ch == '\\' {
+			ch = self.source[self.index];
+			self.index++
+			if (&ch != nil || !character.IsLineTerminator(getCharCodeAt(string(ch), 0))) {
+				switch (ch) {
+					case 'u':
+						if (self.source[self.index] == '{') {
+							self.index++;
+							str += self.scanUnicodeCodePointEscape();
+						} else {
+							unescapedChar := self.scanHexEscape(string(ch));
+							if unescapedChar == "" {
+								self.throwUnexpectedToken("");
+							}
+							str += unescapedChar;
+						}
+						break;
+					case 'x':
+						unescaped := self.scanHexEscape(string(ch));
+						if unescaped == "" {
+							self.throwUnexpectedToken(messages.GetInstance().InvalidHexEscapeSequence);
+						}
+						str += unescaped;
+						break;
+					case 'n':
+						str += string('\n');
+						break;
+					case 'r':
+						str += string('\r');
+						break;
+					case 't':
+						str += string('\t');
+						break;
+					case 'b':
+						str += string('\b');
+						break;
+					case 'f':
+						str += string('\f');
+						break;
+					case 'v':
+						str += string('\x0B');
+						break;
+					case '8':
+					case '9':
+						str += string(ch);
+						self.tolerateUnexpectedToken("");
+						break;
+
+					default:
+						if len(string(ch)) > 0 && character.IsOctalDigit(getCharCodeAt(string(ch), 0)) {
+							octToDec := self.octalToDecimal(string(ch));
+							octal = octToDec.octal || octal;
+							str += string(octToDec.code);
+						} else {
+							str += string(ch);
+						}
+						break;
+				}
+			} else {
+				self.lineNumber++;
+				if (ch == '\r' && self.source[self.index] == '\n') {
+					self.index++;
+				}
+				self.lineStart = self.index;
+			}
+		} else if (character.IsLineTerminator(getCharCodeAt(string(ch), 0))) {
+			break;
+		} else {
+			str += string(ch);
+		}
+	}
+
+	if (len(string(quote)) != 0) {
+		self.index = start;
+		self.throwUnexpectedToken("");
+	}
+
+	return &RawToken{
+		_type: token.StringLiteral,
+		value_string: str,
+		octal: octal,
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
+
+// https://tc39.github.io/ecma262/#sec-template-literal-lexical-components
+
+func (self *Scanner) scanTemplate() *RawToken {
+	cooked := "";
+	terminated := false;
+	start := self.index;
+
+	head := (self.source[start] == '`');
+	tail := false;
+	rawOffset := 2;
+
+	self.index++;
+
+	for !self.eof() {
+		ch := self.source[self.index];
+		self.index++
+		if (ch == '`') {
+			rawOffset = 1;
+			tail = true;
+			terminated = true;
+			break;
+		} else if (ch == '$') {
+			if (self.source[self.index] == '{') {
+				self.curlyStack = append(self.curlyStack, "${")
+				self.index++;
+				terminated = true;
+				break;
+			}
+			cooked += string(ch);
+		} else if (ch == '\\') {
+			ch = self.source[self.index];
+			self.index++
+			if (!character.IsLineTerminator(getCharCodeAt(string(ch), 0))) {
+				switch (ch) {
+					case 'n':
+						cooked += "\n";
+						break;
+					case 'r':
+						cooked += "\r";
+						break;
+					case 't':
+						cooked += "\t";
+						break;
+					case 'u':
+						if (self.source[self.index] == '{') {
+							self.index++;
+							cooked += self.scanUnicodeCodePointEscape();
+						} else {
+							restore := self.index;
+							unescapedChar := self.scanHexEscape(string(ch));
+							if (&unescapedChar != nil) {
+								cooked += unescapedChar;
+							} else {
+								self.index = restore;
+								cooked += string(ch);
+							}
+						}
+						break;
+					case 'x':
+						unescaped := self.scanHexEscape(string(ch));
+						if (&unescaped == nil) {
+							self.throwUnexpectedToken(messages.GetInstance().InvalidHexEscapeSequence);
+						}
+						cooked += unescaped;
+						break;
+					case 'b':
+						cooked += "\b";
+						break;
+					case 'f':
+						cooked += "\f";
+						break;
+					case 'v':
+						cooked += "\v";
+						break;
+
+					default:
+						if (ch == '0') {
+							if character.IsDecimalDigit(getCharCodeAt(self.source, self.index)) {
+								// Illegal: \01 \02 and so on
+								self.throwUnexpectedToken(messages.GetInstance().TemplateOctalLiteral);
+							}
+							cooked += "\0";
+						} else if (character.IsOctalDigit(getCharCodeAt(string(ch), 0))) {
+							// Illegal: \1 \2
+							self.throwUnexpectedToken(messages.GetInstance().TemplateOctalLiteral);
+						} else {
+							cooked += string(ch);
+						}
+						break;
+				}
+			} else {
+				self.lineNumber++
+				if (ch == '\r' && self.source[self.index] == '\n') {
+					self.index++
+				}
+				self.lineStart = self.index;
+			}
+		} else if character.IsLineTerminator(getCharCodeAt(string(ch), 0)) {
+			self.lineNumber++
+			if (ch == '\r' && self.source[self.index] == '\n') {
+				self.index++
+			}
+			self.lineStart = self.index;
+			cooked += "\n";
+		} else {
+			cooked += string(ch);
+		}
+	}
 
 
 
+	if (!terminated) {
+		self.throwUnexpectedToken("");
+	}
+
+	if (!head) {
+		self.curlyStack = self.curlyStack[:len(self.curlyStack) - 1]
+	}
+
+	return &RawToken{
+		_type: token.Template,
+		value_string: self.source[start + 1 : self.index - rawOffset],
+		cooked: cooked,
+		head: head,
+		tail: tail,
+		lineNumber: self.lineNumber,
+		lineStart: self.lineStart,
+		start: start,
+		end: self.index,
+	};
+}
 
 
 
+func (self *Scanner) testRegExp(pattern string, flags string){
+	// TODO implement self after I understnd regex in Golang
+}
 
 
+func (self *Scanner) scanRegExpBody() string {
+	ch := self.source[self.index];
+	if ch != '/'{
+		panic("Regular expression literal must start with a slash")
+	}
 
+	str := string(self.source[self.index]);
+	self.index++
+	classMarker := false;
+	terminated := false;
 
+	for !self.eof() {
+		ch = self.source[self.index]
+		self.index++
+		str += string(ch)
+		if (ch == '\\') {
+			ch = self.source[self.index];
+			self.index++
+			// https://tc39.github.io/ecma262/#sec-literals-regular-expression-literals
+			if character.IsLineTerminator(getCharCodeAt(string(ch), 0)) {
+				self.throwUnexpectedToken(messages.GetInstance().UnterminatedRegExp);
+			}
+			str += string(ch);
+		} else if character.IsLineTerminator(getCharCodeAt(string(ch), 0)) {
+			self.throwUnexpectedToken(messages.GetInstance().UnterminatedRegExp);
+		} else if classMarker {
+			if (ch == ']') {
+				classMarker = false;
+			}
+		} else {
+			if (ch == '/') {
+				terminated = true;
+				break;
+			} else if (ch == '[') {
+				classMarker = true;
+			}
+		}
+	}
+
+	if (!terminated) {
+		self.throwUnexpectedToken(messages.GetInstance().UnterminatedRegExp);
+	}
+
+	// Exclude leading and trailing slash.
+	return string(str[1 : len(str) - 2])
+}
 
 
 

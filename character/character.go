@@ -50,3 +50,8 @@ func IsIdentifierStart(cp rune) bool {
 func IsOctalDigit(cp rune) bool {
 	return (cp >= 0x30 && cp <= 0x37);      // 0..7
 }
+
+
+func IsDecimalDigit(cp rune) bool {
+	return cp >= 0x30 && cp <= 0x39;      // 0..9
+}
