@@ -1165,6 +1165,47 @@ func (self *Scanner) scanRegExpBody() string {
 	return string(str[1 : len(str) - 2])
 }
 
+func (self *Scanner) scanRegExpFlags() string {
+	str := ""
+	flags := ""
+	for (!self.eof()) {
+		ch := self.source[self.index];
+		if !character.IsIdentifierPart(getCharCodeAt(string(ch), 0)) {
+			break;
+		}
+
+		self.index++
+		if (ch == '\\' && !self.eof()) {
+			ch = self.source[self.index];
+			if (ch == 'u') {
+				self.index++
+				restore := self.index;
+				char := self.scanHexEscape("u");
+				if (&char != nil) {
+					flags += char
+					for restore = self.index; restore < self.index; restore++ {
+						str += string(self.source[restore]);
+						str += "\\u";
+					}
+				} else {
+					self.index = restore;
+					flags += "u";
+					str += "\\u"
+				}
+				self.tolerateUnexpectedToken("");
+			} else {
+				str += "\\"
+				self.tolerateUnexpectedToken("");
+			}
+		} else {
+			flags += string(ch);
+			str += string(ch);
+		}
+	}
+
+	return flags;
+}
+
 
 
 
