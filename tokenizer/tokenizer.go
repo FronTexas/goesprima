@@ -4,37 +4,21 @@ import (
 	"goesprima/scanner"
 	"goesprima/token"
 	"goesprima/error_handler"
-	"regexp"
 )
 
 type ReaderEntry string
 
-type RawToken struct {
-	_type token.Token
-	value_string string
-	value_number float32
+type _regexBufferEntry struct{
 	pattern string
 	flags string
-	regex regexp.Regexp
-	octal bool
-	cooked string
-	head bool
-	tail bool
-	lineNumber int
-	lineStart int
-	start int
-	end int
 }
 
 type BufferEntry struct {
     _type string
     value string
-    regex struct {
-        pattern string;
-        flags string;
-    }
+    regex _regexBufferEntry
     _range []int
-    loc scanner.SourceLocation
+    loc *scanner.SourceLocation
 }
 
 type Reader struct {
@@ -116,14 +100,14 @@ func (self *Reader) isRegexStart() bool {
 }
 
 
-func (self *Reader) push(tkn *RawToken) {
-	if (tkn._type == token.Punctuator || tkn._type == token.Keyword) {
-		if (tkn.value_string == "{") {
+func (self *Reader) push(tkn *scanner.RawToken) {
+	if (tkn.Type == token.Punctuator || tkn.Type == token.Keyword) {
+		if (tkn.Value_string == "{") {
 			self.curly = len(self.values)
-		} else if (tkn.value_string == "(") {
+		} else if (tkn.Value_string == "(") {
 			self.paren = len(self.values)
 		}
-		self.values = append(self.values, ReaderEntry(tkn.value_string))
+		self.values = append(self.values, ReaderEntry(tkn.Value_string))
 	} else {
 		self.values = append(self.values, "")
 	}
@@ -179,6 +163,97 @@ func NewTokenizer(code string, config Config) *Tokenizer {
 		Reader: NewReader(),
 	}
 }
+
+func (self *Tokenizer) errors() []*error_handler.Error {
+	return self.ErrorHandler.Errors;
+}
+
+func (self *Tokenizer) getNextToken() *BufferEntry{
+	if (len(self.Buffer) == 0) {
+
+		comments := self.Scanner.ScanComments()
+		if (self.Scanner.TrackComment) {
+			for i := 0; i < len(comments); i++ {
+				e := comments[i];
+				value := self.Scanner.Source[e.Slice[0] : e.Slice[1]];
+				var _type string
+				if e.Multiline {
+					_type = "BlockComment"
+				}else {
+					_type = "LineComment"
+				}
+				comment:= &BufferEntry {
+					_type: _type,
+					value: value,
+				};
+				if (self.TrackRange) {
+					comment._range = e.Range;
+				}
+				if (self.TrackLoc) {
+					comment.loc = e.Loc;
+				}
+				self.Buffer = append(self.Buffer, comment)
+			}
+		}
+
+		if (!self.Scanner.Eof()) {
+
+			var loc scanner.SourceLocation
+			if (self.TrackLoc) {
+				loc = scanner.SourceLocation{
+					Start: &scanner.Position{
+						Line: self.Scanner.LineNumber,
+						Column: self.Scanner.Index,
+					},
+				}
+			}
+			var _token *scanner.RawToken
+			maybeRegex := (self.Scanner.Source[self.Scanner.Index] == '/') && self.Reader.isRegexStart();
+			if maybeRegex {
+				state := self.Scanner.SaveState();
+				var err error
+				_token, err = self.Scanner.ScanRegExp()
+				if err != nil {
+					self.Scanner.RestoreState(state)
+					_token = self.Scanner.Lex()
+				}
+			} else {
+				_token = self.Scanner.Lex();
+			}
+			self.Reader.push(_token)
+			entry:= &BufferEntry{
+				_type: token.GetTokenName(_token.Type),
+				value: self.Scanner.Source[_token.Start : _token.End],
+			};
+			if (self.TrackRange) {
+				entry._range = []int{_token.Start, _token.End}
+			}
+			if (self.TrackLoc) {
+				loc.End = &scanner.Position{
+					Line: self.Scanner.LineNumber,
+					Column: self.Scanner.Index- self.Scanner.LineStart,
+				};
+				entry.loc = &loc;
+			}
+			if (_token.Type == token.RegularExpression) {
+				pattern := _token.Pattern;
+				flags := _token.Flags;
+				entry.regex = _regexBufferEntry{ pattern, flags };
+			}
+			self.Buffer = append(self.Buffer, entry)
+		}
+	}
+
+	toReturn := self.Buffer[0]
+	if len(self.Buffer) > 1 {
+		self.Buffer = self.Buffer[1:]
+	}else{
+		self.Buffer = []*BufferEntry{}
+	}
+	return toReturn
+}
+
+
 
 
 

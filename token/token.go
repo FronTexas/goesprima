@@ -16,3 +16,22 @@ const (
 	Template
 )
 
+var _tokenName []string
+func GetTokenName(tkn Token) string {
+	_tokenName = []string{
+		BooleanLiteral: "Boolean",
+		EOF: "<end>",
+		Identifier: "Identifier",
+		Keyword: "Keyword",
+		NullLiteral: "Null",
+		NumericLiteral: "Numeric",
+		Punctuator: "Punctuator",
+		StringLiteral: "String",
+		RegularExpression : "RegularExpression",
+		Template: "Template",
+	}
+	return _tokenName[tkn]
+
+}
+
+

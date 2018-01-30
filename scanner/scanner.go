@@ -23,39 +23,39 @@ func octalValue (ch string) int {
 }
 
 type Position struct {
-	line int
-	column int
+	Line   int
+	Column int
 }
 
 type SourceLocation struct {
-	start *Position
-	end *Position
+	Start  *Position
+	End    *Position
 	Source string
 }
 
 // TODO: Find a better way to differentiate scanner.Comment and comment-handler.Comment
 type Comment_scanner struct {
-	multiline bool
-	slice []int
-	_range []int
-	loc *SourceLocation
+	Multiline bool
+	Slice []int
+	Range []int
+	Loc *SourceLocation
 }
 
 type RawToken struct {
-	_type token.Token
-	value_string string
-	value_number float32
-	pattern string
-	flags string
-	regex regexp.Regexp
-	octal bool
-	cooked string
-	head bool
-	tail bool
-	LineNumber int
-	LineStart int
-	start int
-	end int
+	Type         token.Token
+	Value_string string
+	Value_number float32
+	Pattern      string
+	Flags        string
+	Regex        regexp.Regexp
+	Octal        bool
+	Cooked       string
+	Head         bool
+	Tail         bool
+	LineNumber   int
+	LineStart    int
+	Start        int
+	End          int
 }
 
 type ScannerState struct {
@@ -94,7 +94,7 @@ func NewScanner(code string, handler ErrorHandler) *Scanner{
 	}
 }
 
-func (self *Scanner) saveState() *ScannerState{
+func (self *Scanner) SaveState() *ScannerState{
 	return &ScannerState{
 		Index: self.Index,
 		LineNumber: self.LineNumber,
@@ -102,13 +102,13 @@ func (self *Scanner) saveState() *ScannerState{
 	}
 }
 
-func (self *Scanner) restoreState(state *ScannerState) {
+func (self *Scanner) RestoreState(state *ScannerState) {
 	self.Index = state.Index
 	self.LineNumber = state.LineNumber
 	self.LineStart = state.LineStart
 }
 
-func (self *Scanner) eof() bool {
+func (self *Scanner) Eof() bool {
 	return self.Index >= self.Length
 }
 
@@ -138,22 +138,22 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 	if self.TrackComment {
 		start = self.Index - offset
 		loc = &SourceLocation{
-			start: &Position{
-				line: self.LineNumber,
-				column: self.Index - self.LineStart - offset,
+			Start: &Position{
+				Line:   self.LineNumber,
+				Column: self.Index - self.LineStart - offset,
 			},
 		}
 	}
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch := []rune(self.Source)[self.Index]
 		self.Index++
 		// TODO implement IsLineTerminator in character.go
 		if character.IsLineTerminator(ch) {
 			if self.TrackComment {
-				loc.end = &Position{
-					line: self.LineNumber,
-					column: self.Index - self.LineStart - 1,
+				loc.End = &Position{
+					Line:   self.LineNumber,
+					Column: self.Index - self.LineStart - 1,
 				}
 				entry := &Comment_scanner{
 					multiline: false,
@@ -174,9 +174,9 @@ func (self *Scanner) skipSingleLineComment(offset int) []*Comment_scanner{
 	}
 
 	if self.TrackComment {
-		loc.end = &Position{
-			line: self.LineNumber,
-			column: self.Index - self.LineStart,
+		loc.End = &Position{
+			Line:   self.LineNumber,
+			Column: self.Index - self.LineStart,
 		}
 
 		entry := &Comment_scanner{
@@ -198,14 +198,14 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 	if self.TrackComment {
 		start = self.Index - 2
 		loc = &SourceLocation{
-			start: &Position{
-				line: self.LineNumber,
-				column: self.Index - self.LineStart - 2,
+			Start: &Position{
+				Line:   self.LineNumber,
+				Column: self.Index - self.LineStart - 2,
 			},
 		}
 	}
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch := []rune(self.Source)[self.Index]
 		self.Index++
 		// TODO implement IsLineTerminator in character.go
@@ -220,9 +220,9 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 			if []rune(self.Source)[self.Index + 1] == 0x2F {
 				self.Index += 2
 				if self.TrackComment {
-					loc.end = &Position{
-						line: self.LineNumber,
-						column: self.Index - self.LineStart,
+					loc.End = &Position{
+						Line:   self.LineNumber,
+						Column: self.Index - self.LineStart,
 					}
 					entry := &Comment_scanner{
 						multiline: true,
@@ -239,11 +239,11 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 			self.Index++
 		}
 	}
-	// Ran off the end of the file - the whole thing is a comment
+	// Ran off the End of the file - the whole thing is a comment
 	if self.TrackComment {
-		loc.end = &Position{
-			line: self.LineNumber,
-			column: self.Index - self.LineStart,
+		loc.End = &Position{
+			Line:   self.LineNumber,
+			Column: self.Index - self.LineStart,
 		}
 
 		entry := &Comment_scanner{
@@ -259,7 +259,7 @@ func (self *Scanner) skipMultiLineComment() []*Comment_scanner{
 	return comments
 }
 
-func (self *Scanner) scanComments() []*Comment_scanner{
+func (self *Scanner) ScanComments() []*Comment_scanner{
 	var comments []*Comment_scanner
 	if self.TrackComment{
 		comments = []*Comment_scanner{}
@@ -267,7 +267,7 @@ func (self *Scanner) scanComments() []*Comment_scanner{
 
 	start := self.Index == 0
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch := getCharCodeAt(self.Source, self.Index)
 
 		if character.IsWhiteSpace(ch) {
@@ -388,7 +388,7 @@ func (self *Scanner) scanHexEscape(prefix string) string {
 	code := 0
 
 	for i := 0; i < len; i++ {
-		if !self.eof() && character.IsHexDigit(getCharCodeAt(self.Source, self.Index)) {
+		if !self.Eof() && character.IsHexDigit(getCharCodeAt(self.Source, self.Index)) {
 			code = code * 16 + hexValue(string(self.Source[self.Index + 1]))
 			self.Index += 1
 		} else {
@@ -409,7 +409,7 @@ func (self *Scanner) scanUnicodeCodePointEscape() string {
 		self.throwUnexpectedToken("")
 	}
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch = self.Source[self.Index]
 		self.Index += 1
 		if (!character.IsHexDigit(getCharCodeAt(string(ch), 0))) {
@@ -428,7 +428,7 @@ func (self *Scanner) scanUnicodeCodePointEscape() string {
 func (self *Scanner) getIdentifier() string {
 	start := self.Index
 	self.Index += 1
-	for !self.eof() {
+	for !self.Eof() {
 		ch := getCharCodeAt(self.Source, self.Index)
 		if (ch == 0x5C) {
 			// Blackslash (U+005C) marks Unicode escape sequence.
@@ -473,7 +473,7 @@ func (self *Scanner) getComplexIdentifier() string {
 		id = ch
 	}
 
-	for !self.eof() {
+	for !self.Eof() {
 		cp = self.codePointAt(self.Index)
 		if (!character.IsIdentifierPart(cp)) {
 			break
@@ -511,18 +511,18 @@ type codeOctalStruct struct {
 }
 
 func (self *Scanner) octalToDecimal(ch string) codeOctalStruct {
-	// \0 is not octal escape sequence
+	// \0 is not Octal escape sequence
 	octal := (ch != "0");
 	code := octalValue(ch);
 
-	if !self.eof() && character.IsOctalDigit(getCharCodeAt(self.Source, self.Index)) {
+	if !self.Eof() && character.IsOctalDigit(getCharCodeAt(self.Source, self.Index)) {
 		octal = true;
 		code = code * 8 + octalValue(string(self.Source[self.Index]))
 		self.Index++
 
 		// 3 digits are only allowed when string starts
 		// with 0, 1, 2, 3
-		if strings.Index("0123", string(ch)) >= 0 && !self.eof() && character.IsOctalDigit(getCharCodeAt(self.Source, self.Index)) {
+		if strings.Index("0123", string(ch)) >= 0 && !self.Eof() && character.IsOctalDigit(getCharCodeAt(self.Source, self.Index)) {
 			code = code * 8 + octalValue(string(self.Source[self.Index]));
 			self.Index++
 		}
@@ -568,12 +568,12 @@ func (self *Scanner) scanIdentifier() *RawToken {
 	}
 
 	return &RawToken{
-		_type: _type,
-		value_string: id,
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         _type,
+		Value_string: id,
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
@@ -650,12 +650,12 @@ func(self *Scanner) scanPunctuator() *RawToken {
 	}
 
 	return &RawToken{
-		_type: token.Punctuator,
-		value_string: str,
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.Punctuator,
+		Value_string: str,
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
@@ -663,7 +663,7 @@ func(self *Scanner) scanPunctuator() *RawToken {
 func (self *Scanner) scanHexLiteral(start int) *RawToken {
 	num := "";
 
-	for !self.eof() {
+	for !self.Eof() {
 		if !character.IsHexDigit(getCharCodeAt(self.Source, self.Index)) {
 			break;
 		}
@@ -680,12 +680,12 @@ func (self *Scanner) scanHexLiteral(start int) *RawToken {
 	}
 	value_number, _ := strconv.ParseInt("0x" + num, 16, 0)
 	return &RawToken{
-		_type: token.NumericLiteral,
-		value_number: float32(value_number),
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.NumericLiteral,
+		Value_number: float32(value_number),
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
@@ -693,7 +693,7 @@ func (self *Scanner) scanBinaryLiteral(start int) *RawToken {
 	num := "";
 	var ch rune
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch = rune(self.Source[self.Index]);
 		if ch != '0' && ch != '1' {
 			break;
@@ -707,7 +707,7 @@ func (self *Scanner) scanBinaryLiteral(start int) *RawToken {
 		self.throwUnexpectedToken("");
 	}
 
-	if (!self.eof()) {
+	if (!self.Eof()) {
 		ch = getCharCodeAt(self.Source, self.Index);
 		/* istanbul ignore else */
 		if (character.IsIdentifierStart(ch) || character.IsDecimalDigit(ch)) {
@@ -717,12 +717,12 @@ func (self *Scanner) scanBinaryLiteral(start int) *RawToken {
 
 	value_number, _ := strconv.ParseInt(num, 2, 0)
 	return &RawToken{
-		_type: token.NumericLiteral,
-		value_number: float32(value_number),
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.NumericLiteral,
+		Value_number: float32(value_number),
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
@@ -738,7 +738,7 @@ func (self *Scanner) scanOctalLiteral(prefix string, start int) *RawToken {
 		self.Index++
 	}
 
-	for !self.eof() {
+	for !self.Eof() {
 		if !character.IsOctalDigit(getCharCodeAt(self.Source, self.Index)) {
 			break;
 		}
@@ -756,18 +756,18 @@ func (self *Scanner) scanOctalLiteral(prefix string, start int) *RawToken {
 	}
 	value_number, _ := strconv.ParseInt(num, 2, 0)
 	return &RawToken{
-		_type: token.NumericLiteral,
-		value_number: float32(value_number),
-		octal: octal,
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.NumericLiteral,
+		Value_number: float32(value_number),
+		Octal:        octal,
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
 func (self *Scanner) isImplicitOctalLiteral() bool {
-	// Implicit octal, unless there is a non-octal digit.
+	// Implicit Octal, unless there is a non-Octal digit.
 	// (Annex B.1.1 on Numeric Literals)
 	for i := self.Index + 1; i < self.Length; i++ {
 		ch := self.Source[i];
@@ -788,7 +788,7 @@ func (self *Scanner) scanNumericLiteral() *RawToken {
 
 	// TODO figure out how to use assert instead of if statement
 	if !character.IsDecimalDigit(getCharCodeAt(string(ch), 0)) && !(ch == '.'){
-		panic("Numeric literal must start with a decimal digit or a decimal point")
+		panic("Numeric literal must Start with a decimal digit or a decimal point")
 	}
 
 	var num string;
@@ -862,12 +862,12 @@ func (self *Scanner) scanNumericLiteral() *RawToken {
 	}
 	value_number, _ := strconv.ParseFloat(num,32)
 	return &RawToken{
-		_type: token.NumericLiteral,
-		value_number: float32(value_number),
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.NumericLiteral,
+		Value_number: float32(value_number),
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
@@ -883,7 +883,7 @@ func (self *Scanner) scanStringLiteral() *RawToken {
 	octal := false;
 	var str string
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch := self.Source[self.Index]
 		self.Index++
 
@@ -969,13 +969,13 @@ func (self *Scanner) scanStringLiteral() *RawToken {
 	}
 
 	return &RawToken{
-		_type: token.StringLiteral,
-		value_string: str,
-		octal: octal,
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.StringLiteral,
+		Value_string: str,
+		Octal:        octal,
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
@@ -992,7 +992,7 @@ func (self *Scanner) scanTemplate() *RawToken {
 
 	self.Index++;
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch := self.Source[self.Index];
 		self.Index++
 		if (ch == '`') {
@@ -1099,29 +1099,29 @@ func (self *Scanner) scanTemplate() *RawToken {
 	}
 
 	return &RawToken{
-		_type: token.Template,
-		value_string: self.Source[start + 1 : self.Index - rawOffset],
-		cooked: cooked,
-		head: head,
-		tail: tail,
-		LineNumber: self.LineNumber,
-		LineStart: self.LineStart,
-		start: start,
-		end: self.Index,
+		Type:         token.Template,
+		Value_string: self.Source[start + 1 : self.Index - rawOffset],
+		Cooked:       cooked,
+		Head:         head,
+		Tail:         tail,
+		LineNumber:   self.LineNumber,
+		LineStart:    self.LineStart,
+		Start:        start,
+		End:          self.Index,
 	};
 }
 
 
 
 func (self *Scanner) testRegExp(pattern string, flags string){
-	// TODO implement self after I understnd regex in Golang
+	// TODO implement self after I understnd Regex in Golang
 }
 
 
 func (self *Scanner) scanRegExpBody() string {
 	ch := self.Source[self.Index];
 	if ch != '/'{
-		panic("Regular expression literal must start with a slash")
+		panic("Regular expression literal must Start with a slash")
 	}
 
 	str := string(self.Source[self.Index]);
@@ -1129,7 +1129,7 @@ func (self *Scanner) scanRegExpBody() string {
 	classMarker := false;
 	terminated := false;
 
-	for !self.eof() {
+	for !self.Eof() {
 		ch = self.Source[self.Index]
 		self.Index++
 		str += string(ch)
@@ -1168,14 +1168,14 @@ func (self *Scanner) scanRegExpBody() string {
 func (self *Scanner) scanRegExpFlags() string {
 	str := ""
 	flags := ""
-	for (!self.eof()) {
+	for (!self.Eof()) {
 		ch := self.Source[self.Index];
 		if !character.IsIdentifierPart(getCharCodeAt(string(ch), 0)) {
 			break;
 		}
 
 		self.Index++
-		if (ch == '\\' && !self.eof()) {
+		if (ch == '\\' && !self.Eof()) {
 			ch = self.Source[self.Index];
 			if (ch == 'u') {
 				self.Index++
@@ -1206,20 +1206,20 @@ func (self *Scanner) scanRegExpFlags() string {
 	return flags;
 }
 
-func (self *Scanner) scanRegExp()  {
+func (self *Scanner) ScanRegExp() (*RawToken, error)  {
 	// TODO implement self after implementing testRegExp
 }
 
 
-func (self *Scanner) lex() *RawToken {
-	if self.eof() {
+func (self *Scanner) Lex() *RawToken {
+	if self.Eof() {
 		return &RawToken{
-			_type: token.EOF,
-			value_string: "",
-			LineNumber: self.LineNumber,
-			LineStart: self.LineStart,
-			start: self.Index,
-			end: self.Index,
+			Type:         token.EOF,
+			Value_string: "",
+			LineNumber:   self.LineNumber,
+			LineStart:    self.LineStart,
+			Start:        self.Index,
+			End:          self.Index,
 		};
 	}
 
@@ -1239,7 +1239,7 @@ func (self *Scanner) lex() *RawToken {
 		return self.scanStringLiteral();
 	}
 
-	// Dot (.) U+002E can also start a floating-point number, hence the need
+	// Dot (.) U+002E can also Start a floating-point number, hence the need
 	// to check the next character.
 	if (cp == 0x2E) {
 		if character.IsDecimalDigit(getCharCodeAt(self.Source, self.Index + 1)) {
@@ -1252,13 +1252,13 @@ func (self *Scanner) lex() *RawToken {
 		return self.scanNumericLiteral();
 	}
 
-	// Template literals start with ` (U+0060) for template head
-	// or } (U+007D) for template middle or template tail.
+	// Template literals Start with ` (U+0060) for template head
+	// or } (U+007D) for template middle or template Tail.
 	if (cp == 0x60 || (cp == 0x7D && self.CurlyStack[len(self.CurlyStack) - 1] == "${")) {
 		return self.scanTemplate();
 	}
 
-	// Possible identifier start in a surrogate pair.
+	// Possible identifier Start in a surrogate pair.
 	if (cp >= 0xD800 && cp < 0xDFFF) {
 		if (character.IsIdentifierStart(self.codePointAt(self.Index))) {
 			return self.scanIdentifier();

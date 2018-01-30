@@ -10,8 +10,8 @@ type Error struct {
 }
 
 type ErrorHandler struct{
-	errors []*Error
-	tolerant bool
+	Errors []*Error
+	Tolerant bool
 }
 
 func NewError(message string) *Error{
@@ -22,18 +22,18 @@ func NewError(message string) *Error{
 
 func NewErrorHandler() *ErrorHandler{
 	return &ErrorHandler{
-		errors: []*Error{},
-		tolerant: false,
+		Errors: []*Error{},
+		Tolerant: false,
 	}
 }
 
 func (self *ErrorHandler) recordError(error *Error) {
-	self.errors = append(self.errors, error)
+	self.Errors = append(self.Errors, error)
 }
 
 
 func (self *ErrorHandler) tolerate(error *Error) {
-	if (self.tolerant) {
+	if (self.Tolerant) {
 		self.recordError(error);
 	} else {
 		// TODO Figure out how to throw error
@@ -72,7 +72,7 @@ func (self *ErrorHandler) throwError(index int, line int, col int, description s
 
 func (self *ErrorHandler) tolerateError(index int, line int, col int, description string) {
 	error := self.createError(index, line, col, description);
-	if (self.tolerant) {
+	if (self.Tolerant) {
 		self.recordError(error);
 	} else {
 		//throw error;
