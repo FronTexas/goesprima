@@ -1,10 +1,5 @@
 package main
 
-import (
-	"github.com/robertkrimen/otto/parser"
-	"net"
-)
-
 type (
 	ArgumentListElement interface{}
 	Expression interface{
@@ -46,8 +41,10 @@ type (
 		ObjectPatternProperty
 	}
 
-	ArrayPattern interface{
+	ArrayPattern struct{
 		BindingPattern
+		_type string
+		elements []*ArrayPatternElement
 	}
 
 	ObjectPattern interface{
@@ -109,8 +106,10 @@ type (
 		ExportDeclaration
 	}
 
-	ArrayExpresion interface {
+	ArrayExpression struct {
 		Expression
+		_type string
+		elements []*ArrayExpressionElement
 	}
 
 	ArrowFunctionExpression interface {
@@ -307,11 +306,23 @@ type (
 
 	PropertyValue interface {}
 
-	//export type StatementListItem = Declaration | Statement;
-
 	StatementListItem interface {}
-
 )
+
+
+func NewArrayExpression(elements []*ArrayExpressionElement) *ArrayExpression {
+	a := new(ArrayExpression)
+	a._type = Syntax["ArrayExpression"]
+	a.elements = elements
+	return a
+}
+
+func NewArrayPattern (elements []*ArrayPatternElement) *ArrayPattern {
+	a := new(ArrayPattern)
+	a._type = Syntax["ArrayPattern"]
+	a.elements = elements
+	return a
+}
 
 
 
